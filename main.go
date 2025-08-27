@@ -1,11 +1,14 @@
 package main
 
 import (
+	"database/sql"
 	"fmt"
 	"log"
 	"os"
 
 	"github.com/LouisRemes-95/gator/internal/config"
+	"github.com/LouisRemes-95/gator/internal/database"
+	_ "github.com/lib/pq"
 )
 
 func main() {
@@ -14,7 +17,15 @@ func main() {
 		log.Fatal("Failed to load config:", err)
 	}
 
+	db, err := sql.Open("postgres", cfg.DbUrl)
+	if err != nil {
+		fmt.Printf("Error: %v\n", err)
+		os.Exit(1)
+	}
+	dbQueries := database.New(db)
+
 	programState := &state{
+		db:  dbQueries,
 		cfg: &cfg,
 	}
 
@@ -23,6 +34,7 @@ func main() {
 	}
 
 	programCommands.register("login", handlerLogin)
+	programCommands.register("register", handlerRegister)
 
 	if len(os.Args) < 2 {
 		fmt.Println("Not enough input arguments")
@@ -37,5 +49,6 @@ func main() {
 	err = programCommands.run(programState, requestedCommand)
 	if err != nil {
 		fmt.Printf("Error: %v\n", err)
+		os.Exit(1)
 	}
 }
