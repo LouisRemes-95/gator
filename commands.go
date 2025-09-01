@@ -24,6 +24,44 @@ type command struct {
 	Args []string
 }
 
+type commands struct {
+	registeredCommands map[string]func(*state, command) error
+}
+
+func (c *commands) run(s *state, cmd command) error {
+	f, ok := c.registeredCommands[cmd.Name]
+	if !ok {
+		return fmt.Errorf("%s command not in register", cmd.Name)
+	}
+
+	err := f(s, cmd)
+	if err != nil {
+		return fmt.Errorf("failed to use registered command %s: %w", cmd.Name, err)
+	}
+
+	return nil
+}
+
+func (c *commands) register(name string, f func(*state, command) error) {
+	c.registeredCommands[name] = f
+}
+
+func registeredCommands() *commands {
+	programCommands := &commands{
+		registeredCommands: make(map[string]func(*state, command) error),
+	}
+
+	programCommands.register("login", handlerLogin)
+	programCommands.register("register", handlerRegister)
+	programCommands.register("reset", handlerReset)
+	programCommands.register("users", handlerUsers)
+	programCommands.register("agg", handlerAgg)
+
+	return programCommands
+}
+
+// Command handlers
+
 func handlerLogin(s *state, cmd command) error {
 	if len(cmd.Args) == 0 {
 		return errors.New("command arg's slice empty")
@@ -84,24 +122,34 @@ func handlerRegister(s *state, cmd command) error {
 	return nil
 }
 
-type commands struct {
-	registeredCommands map[string]func(*state, command) error
-}
-
-func (c *commands) run(s *state, cmd command) error {
-	f, ok := c.registeredCommands[cmd.Name]
-	if !ok {
-		return fmt.Errorf("%s command not in register", cmd.Name)
-	}
-
-	err := f(s, cmd)
+func handlerReset(s *state, _ command) error {
+	err := s.db.DeleteUsers(context.Background())
 	if err != nil {
-		return fmt.Errorf("failed to use registered command %s: %w", cmd.Name, err)
+		return fmt.Errorf("failed to delete all users from db: %w", err)
 	}
-
 	return nil
 }
 
-func (c *commands) register(name string, f func(*state, command) error) {
-	c.registeredCommands[name] = f
+func handlerUsers(s *state, _ command) error {
+	users, err := s.db.GetUsers(context.Background())
+	if err != nil {
+		return fmt.Errorf("failed to get users from bd: %w", err)
+	}
+	for _, user := range users {
+		msg := "* " + user.Name
+		if user.Name == s.cfg.CurrentUserName {
+			msg += " (current)"
+		}
+		fmt.Println(msg)
+	}
+	return nil
+}
+
+func handlerAgg(_ *state, _ command) error {
+	rssFeed, err := fetchFeed(context.Background(), "https://www.wagslane.dev/index.xml")
+	if err != nil {
+		return fmt.Errorf("failed to fetch the feed: %w", err)
+	}
+	fmt.Printf("%+v\n", rssFeed)
+	return nil
 }

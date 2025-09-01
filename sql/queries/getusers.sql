@@ -1,3 +1,3 @@
--- name: GetUser :one
+-- name: GetUsers :many
 
-SELECT * FROM users WHERE name = $1;
+SELECT * FROM users;

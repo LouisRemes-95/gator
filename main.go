@@ -29,12 +29,7 @@ func main() {
 		cfg: &cfg,
 	}
 
-	programCommands := &commands{
-		registeredCommands: make(map[string]func(*state, command) error),
-	}
-
-	programCommands.register("login", handlerLogin)
-	programCommands.register("register", handlerRegister)
+	programCommands := registeredCommands()
 
 	if len(os.Args) < 2 {
 		fmt.Println("Not enough input arguments")
@@ -51,4 +46,6 @@ func main() {
 		fmt.Printf("Error: %v\n", err)
 		os.Exit(1)
 	}
+
+	os.Exit(0)
 }
