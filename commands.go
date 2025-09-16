@@ -56,6 +56,7 @@ func registeredCommands() *commands {
 	programCommands.register("reset", handlerReset)
 	programCommands.register("users", handlerUsers)
 	programCommands.register("agg", handlerAgg)
+	programCommands.register("addfeed", handlerAddFeed)
 
 	return programCommands
 }
@@ -151,5 +152,45 @@ func handlerAgg(_ *state, _ command) error {
 		return fmt.Errorf("failed to fetch the feed: %w", err)
 	}
 	fmt.Printf("%+v\n", rssFeed)
+	return nil
+}
+
+func handlerAddFeed(s *state, cmd command) error {
+	if len(cmd.Args) < 2 {
+		return errors.New("command arg's slice has less than 2 elements")
+	}
+
+	user, err := s.db.GetUser(context.Background(), s.cfg.CurrentUserName)
+	if err != nil {
+		return fmt.Errorf("failed to get the current user: %w", err)
+	}
+
+	myParams := database.CreateFeedParams{
+		ID:        uuid.New(),
+		CreatedAt: time.Now(),
+		UpdatedAt: time.Now(),
+		Name:      cmd.Args[0],
+		Url:       cmd.Args[1],
+		UserID:    user.ID,
+	}
+
+	Feed, err := s.db.CreateFeed(context.Background(), myParams)
+	if err != nil {
+		var pqErr *pq.Error
+		if errors.As(err, &pqErr) {
+			if pqErr.Code == "23505" {
+				fmt.Println("Error: Feed with that url already exists!")
+				os.Exit(1)
+			}
+		}
+		return fmt.Errorf("failed to create user in db: %w", err)
+	}
+	fmt.Println("Feed created:")
+	fmt.Println("ID: ", Feed.ID)
+	fmt.Println("Name: ", Feed.Name)
+	fmt.Println("Create at: ", Feed.CreatedAt)
+	fmt.Println("Updated at ", Feed.UpdatedAt)
+	fmt.Println("Url: ", Feed.Url)
+	fmt.Println("UserID: ", Feed.UserID)
 	return nil
 }
