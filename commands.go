@@ -57,6 +57,7 @@ func registeredCommands() *commands {
 	programCommands.register("users", handlerUsers)
 	programCommands.register("agg", handlerAgg)
 	programCommands.register("addfeed", handlerAddFeed)
+	programCommands.register("feeds", handlerFeeds)
 
 	return programCommands
 }
@@ -192,5 +193,20 @@ func handlerAddFeed(s *state, cmd command) error {
 	fmt.Println("Updated at ", Feed.UpdatedAt)
 	fmt.Println("Url: ", Feed.Url)
 	fmt.Println("UserID: ", Feed.UserID)
+	return nil
+}
+
+func handlerFeeds(s *state, _ command) error {
+	feeds, err := s.db.GetFeeds(context.Background())
+	if err != nil {
+		return fmt.Errorf("failed to get the feeds: %w", err)
+	}
+
+	for _, feed := range feeds {
+		fmt.Println("Name: ", feed.FeedName)
+		fmt.Println("Url: ", feed.FeedUrl)
+		fmt.Println("User: ", feed.UserName)
+		fmt.Println("")
+	}
 	return nil
 }
