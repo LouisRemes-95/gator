@@ -56,10 +56,10 @@ func registeredCommands() *commands {
 	programCommands.register("reset", handlerReset)
 	programCommands.register("users", handlerUsers)
 	programCommands.register("agg", handlerAgg)
-	programCommands.register("addfeed", handlerAddFeed)
+	programCommands.register("addfeed", middlewareLoggedIn(handlerAddFeed))
 	programCommands.register("feeds", handlerFeeds)
-	programCommands.register("follow", handlerFollow)
-	programCommands.register("following", handlerFollowing)
+	programCommands.register("follow", middlewareLoggedIn(handlerFollow))
+	programCommands.register("following", middlewareLoggedIn(handlerFollowing))
 
 	return programCommands
 }
@@ -158,7 +158,7 @@ func handlerAgg(_ *state, _ command) error {
 	return nil
 }
 
-func handlerAddFeed(s *state, cmd command) error {
+func handlerAddFeed(s *state, cmd command, user database.User) error {
 	if len(cmd.Args) < 2 {
 		return errors.New("command arg's slice has less than 2 elements")
 	}
@@ -225,7 +225,7 @@ func handlerFeeds(s *state, _ command) error {
 	return nil
 }
 
-func handlerFollow(s *state, cmd command) error {
+func handlerFollow(s *state, cmd command, user database.User) error {
 	if len(cmd.Args) == 0 {
 		return errors.New("command arg's slice empty")
 	}
@@ -233,11 +233,6 @@ func handlerFollow(s *state, cmd command) error {
 	feed, err := s.db.GetFeedByUrl(context.Background(), cmd.Args[0])
 	if err != nil {
 		return fmt.Errorf("failed to get feed by url: %w", err)
-	}
-
-	user, err := s.db.GetUser(context.Background(), s.cfg.CurrentUserName)
-	if err != nil {
-		return fmt.Errorf("failed to get current user by name: %w", err)
 	}
 
 	myParams := database.CreateFeedFollowParams{
@@ -257,12 +252,7 @@ func handlerFollow(s *state, cmd command) error {
 	return nil
 }
 
-func handlerFollowing(s *state, _ command) error {
-	user, err := s.db.GetUser(context.Background(), s.cfg.CurrentUserName)
-	if err != nil {
-		return fmt.Errorf("failed to get the current user: %w", err)
-	}
-
+func handlerFollowing(s *state, _ command, user database.User) error {
 	follows, err := s.db.GetFeedFollowsForUser(context.Background(), user.ID)
 	if err != nil {
 		return fmt.Errorf("failed to get follows for current user: %w", err)
@@ -273,4 +263,18 @@ func handlerFollowing(s *state, _ command) error {
 		println(follow.FeedName)
 	}
 	return nil
+}
+
+func middlewareLoggedIn(handler func(s *state, cmd command, user database.User) error) func(*state, command) error {
+	return func(s *state, cmd command) error {
+		user, err := s.db.GetUser(context.Background(), s.cfg.CurrentUserName)
+		if err != nil {
+			return fmt.Errorf("failed to get the current user: %w", err)
+		}
+		err = handler(s, cmd, user)
+		if err != nil {
+			return fmt.Errorf("handler failed: %w", err)
+		}
+		return err
+	}
 }
