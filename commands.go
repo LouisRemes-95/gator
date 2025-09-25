@@ -60,6 +60,7 @@ func registeredCommands() *commands {
 	programCommands.register("feeds", handlerFeeds)
 	programCommands.register("follow", middlewareLoggedIn(handlerFollow))
 	programCommands.register("following", middlewareLoggedIn(handlerFollowing))
+	programCommands.register("unfollow", middlewareLoggedIn(handlerUnfollow))
 
 	return programCommands
 }
@@ -261,6 +262,27 @@ func handlerFollowing(s *state, _ command, user database.User) error {
 	fmt.Println(user.Name, "follows:")
 	for _, follow := range follows {
 		println(follow.FeedName)
+	}
+	return nil
+}
+
+func handlerUnfollow(s *state, cmd command, user database.User) error {
+	if len(cmd.Args) == 0 {
+		return errors.New("command arg's slice empty")
+	}
+
+	feed, err := s.db.GetFeedByUrl(context.Background(), cmd.Args[0])
+	if err != nil {
+		return fmt.Errorf("failed to get feed bu url: %w", err)
+	}
+
+	myParams := database.DeleteFeedFollowParams{
+		UserID: user.ID,
+		FeedID: feed.ID,
+	}
+	err = s.db.DeleteFeedFollow(context.Background(), myParams)
+	if err != nil {
+		return fmt.Errorf("failed to delete the feedfollow entry")
 	}
 	return nil
 }
