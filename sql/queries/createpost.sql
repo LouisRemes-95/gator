@@ -1,5 +1,5 @@
--- name: CreatePost :one
-INSERT INTO posts (id, created_at, updated_at, title, url, published_at, feed_id)
+-- name: CreatePost :exec
+INSERT INTO posts (id, created_at, updated_at, title, url, description, published_at, feed_id)
 VALUES (
     $1,
     $2,
@@ -7,6 +7,13 @@ VALUES (
     $4,
     $5,
     $6,
-    $7
+    $7,
+    $8
 )
-RETURNING *;
+ON CONFLICT (url)
+DO UPDATE SET
+    updated_at = EXCLUDED.updated_at,
+    title = EXCLUDED.title,
+    published_at = EXCLUDED.published_at,
+    feed_id = EXCLUDED.feed_id
+WHERE posts.published_at < EXCLUDED.published_at;

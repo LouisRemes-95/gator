@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"strconv"
 	"time"
 
 	"github.com/LouisRemes-95/gator/internal/config"
@@ -61,6 +62,7 @@ func registeredCommands() *commands {
 	programCommands.register("follow", middlewareLoggedIn(handlerFollow))
 	programCommands.register("following", middlewareLoggedIn(handlerFollowing))
 	programCommands.register("unfollow", middlewareLoggedIn(handlerUnfollow))
+	programCommands.register("browse", middlewareLoggedIn(handlerBrowse))
 
 	return programCommands
 }
@@ -163,7 +165,10 @@ func handlerAgg(s *state, cmd command) error {
 	fmt.Println("Collecting feeds every %w", timeBetweenReps)
 	ticker := time.NewTicker(timeBetweenReps)
 	for ; ; <-ticker.C {
-		scrapeFeeds(s)
+		err := scrapeFeeds(s)
+		if err != nil {
+			fmt.Println("failed to scrape feeds", err)
+		}
 	}
 }
 
@@ -295,6 +300,41 @@ func handlerUnfollow(s *state, cmd command, user database.User) error {
 	return nil
 }
 
+func handlerBrowse(s *state, cmd command, user database.User) error {
+	var limit int
+	err := errors.New("no input arguments")
+	if len(cmd.Args) > 0 {
+		limit, err = strconv.Atoi(cmd.Args[0])
+	}
+	if err != nil {
+		println("No proper limit number of posts provided, defaulting to 2")
+		print("\n")
+		limit = 2
+	}
+
+	myParams := database.GetPostsforUserParams{
+		Name:  user.Name,
+		Limit: int32(limit),
+	}
+
+	posts, err := s.db.GetPostsforUser(context.Background(), myParams)
+	if err != nil {
+		return fmt.Errorf("failed to get posts for user %s: %w", user.Name, err)
+	}
+
+	for _, post := range posts {
+		fmt.Println("Post title: ", post.Title)
+		fmt.Println("Created at: ", post.CreatedAt)
+		fmt.Println("Updated at: ", post.UpdatedAt)
+		fmt.Println("Published at: ", post.PublishedAt)
+		fmt.Println("Url: ", post.Url)
+		fmt.Println("Description: ", post.Description)
+		print("\n")
+	}
+	return nil
+}
+
+// Helper functions
 func middlewareLoggedIn(handler func(s *state, cmd command, user database.User) error) func(*state, command) error {
 	return func(s *state, cmd command) error {
 		user, err := s.db.GetUser(context.Background(), s.cfg.CurrentUserName)
@@ -326,7 +366,29 @@ func scrapeFeeds(s *state) error {
 	}
 
 	for _, item := range rssFeed.Channel.Item {
-		fmt.Println(item.Title)
+		publishTime, err := time.Parse(time.RFC1123Z, item.PubDate)
+		if err != nil {
+			return fmt.Errorf("failed to parse PubDate: %w", err)
+		}
+		description := sql.NullString{
+			String: item.Description,
+			Valid:  item.Description != "", // or some other check for "is it meaningful?"
+		}
+
+		myParams := database.CreatePostParams{
+			ID:          uuid.New(),
+			CreatedAt:   time.Now(),
+			UpdatedAt:   time.Now(),
+			Title:       item.Title,
+			Url:         item.Link,
+			Description: description,
+			PublishedAt: publishTime,
+			FeedID:      feed.ID,
+		}
+		err = s.db.CreatePost(context.Background(), myParams)
+		if err != nil {
+			return fmt.Errorf("failed to create a post: %w", err)
+		}
 	}
 	return nil
 }

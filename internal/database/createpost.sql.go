@@ -7,13 +7,14 @@ package database
 
 import (
 	"context"
+	"database/sql"
 	"time"
 
 	"github.com/google/uuid"
 )
 
-const createPost = `-- name: CreatePost :one
-INSERT INTO posts (id, created_at, updated_at, title, url, published_at, feed_id)
+const createPost = `-- name: CreatePost :exec
+INSERT INTO posts (id, created_at, updated_at, title, url, description, published_at, feed_id)
 VALUES (
     $1,
     $2,
@@ -21,9 +22,16 @@ VALUES (
     $4,
     $5,
     $6,
-    $7
+    $7,
+    $8
 )
-RETURNING id, created_at, updated_at, title, url, description, published_at, feed_id
+ON CONFLICT (url)
+DO UPDATE SET
+    updated_at = EXCLUDED.updated_at,
+    title = EXCLUDED.title,
+    published_at = EXCLUDED.published_at,
+    feed_id = EXCLUDED.feed_id
+WHERE posts.published_at < EXCLUDED.published_at
 `
 
 type CreatePostParams struct {
@@ -32,30 +40,21 @@ type CreatePostParams struct {
 	UpdatedAt   time.Time
 	Title       string
 	Url         string
+	Description sql.NullString
 	PublishedAt time.Time
 	FeedID      uuid.UUID
 }
 
-func (q *Queries) CreatePost(ctx context.Context, arg CreatePostParams) (Post, error) {
-	row := q.db.QueryRowContext(ctx, createPost,
+func (q *Queries) CreatePost(ctx context.Context, arg CreatePostParams) error {
+	_, err := q.db.ExecContext(ctx, createPost,
 		arg.ID,
 		arg.CreatedAt,
 		arg.UpdatedAt,
 		arg.Title,
 		arg.Url,
+		arg.Description,
 		arg.PublishedAt,
 		arg.FeedID,
 	)
-	var i Post
-	err := row.Scan(
-		&i.ID,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-		&i.Title,
-		&i.Url,
-		&i.Description,
-		&i.PublishedAt,
-		&i.FeedID,
-	)
-	return i, err
+	return err
 }
